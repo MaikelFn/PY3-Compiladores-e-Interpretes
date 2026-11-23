@@ -859,7 +859,6 @@ parser code {:
             return null;
         }
 
-        generador.generarIncrementoDecremento(nombre, operador, tipo);
         return tipo;
     }
 
@@ -1759,9 +1758,17 @@ EXPR_NEGATIVO ::=
 EXPR_INCREMENTO ::=
       ID:id INCREMENTO
       {:
-          RESULT = validarIncrementoDecremento(
+          String tipo = validarIncrementoDecremento(
               (String) id, "++", idleft
           );
+
+          if (tipo != null) {
+              generador.generarIncrementoDecremento(
+                  (String) id, "++", tipo
+              );
+          }
+
+          RESULT = tipo;
       :}
     ;
 
@@ -1771,9 +1778,17 @@ EXPR_INCREMENTO ::=
 EXPR_DECREMENTO ::=
       ID:id DECREMENTO
       {:
-          RESULT = validarIncrementoDecremento(
+          String tipo = validarIncrementoDecremento(
               (String) id, "--", idleft
           );
+
+          if (tipo != null) {
+              generador.generarIncrementoDecremento(
+                  (String) id, "--", tipo
+              );
+          }
+
+          RESULT = tipo;
       :}
     ;
 
@@ -1819,11 +1834,31 @@ OPERANDO ::=
     | EXPR_NEGATIVO:en
       {: RESULT = en; :}
 
-    | EXPR_INCREMENTO:ei
-      {: RESULT = generador.crearResultado(ei, null); :}
+    | ID:id INCREMENTO
+      {:
+          String tipo = validarIncrementoDecremento(
+              (String) id, "++", idleft
+          );
 
-    | EXPR_DECREMENTO:ed
-      {: RESULT = generador.crearResultado(ed, null); :}
+          RESULT = (tipo != null)
+              ? generador.crearIncrementoDecrementoPostfijo(
+                  (String) id, "++", tipo
+              )
+              : null;
+      :}
+
+    | ID:id DECREMENTO
+      {:
+          String tipo = validarIncrementoDecremento(
+              (String) id, "--", idleft
+          );
+
+          RESULT = (tipo != null)
+              ? generador.crearIncrementoDecrementoPostfijo(
+                  (String) id, "--", tipo
+              )
+              : null;
+      :}
 
     | LLAMADA_FUNCION:lf
       {: RESULT = lf; :}

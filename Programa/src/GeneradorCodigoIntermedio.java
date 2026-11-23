@@ -666,6 +666,28 @@ public class GeneradorCodigoIntermedio {
   }
 
   /**
+   * Nombre: crearIncrementoDecrementoPostfijo
+   * Descripcion: Genera un incremento o decremento usado como expresion.
+   * Salidas: Guarda el valor previo y agrega las instrucciones de calculo
+   * y asignacion.
+   *
+   * @param identificador Identificador que se modificara.
+   * @param operador Operador de incremento o decremento.
+   * @param tipo Tipo del identificador.
+   * @return Resultado con el valor previo del identificador.
+   */
+  public ResultadoExpresion crearIncrementoDecrementoPostfijo(
+      String identificador,
+      String operador,
+      String tipo
+  ) {
+    String valorPrevio = nuevoTemporal(tipo);
+    emitir(valorPrevio + " = " + identificador);
+    generarIncrementoDecremento(identificador, operador, tipo);
+    return crearResultado(tipo, valorPrevio);
+  }
+
+  /**
    * Nombre: generarDeclaracion
    * Descripcion: Genera la declaracion de una variable.
    * Salidas: Agrega la declaracion al codigo intermedio.
