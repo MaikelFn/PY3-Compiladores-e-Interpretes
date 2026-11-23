@@ -140,6 +140,32 @@ public class GeneradorCodigoIntermedio {
   }
 
   /**
+   * Nombre: crearNegativo
+   * Descripcion: Genera la negacion aritmetica de una expresion numerica.
+   * Salidas: Agrega la instruccion de resta desde cero al codigo intermedio.
+   *
+   * @param expresion Expresion que se negara.
+   * @return Resultado de la negacion o null si la expresion no es numerica.
+   */
+  public ResultadoExpresion crearNegativo(ResultadoExpresion expresion) {
+    if (expresion == null || expresion.getLugar() == null) {
+      return null;
+    }
+
+    String tipo = expresion.getTipo();
+
+    if (!"int".equals(tipo) && !"float".equals(tipo)) {
+      return null;
+    }
+
+    String temporal = nuevoTemporal(tipo);
+
+    emitir(temporal + " = 0 - " + expresion.getLugar());
+
+    return crearResultado(tipo, temporal);
+  }
+
+  /**
    * Nombre: crearLlamadaFuncion
    * Descripcion: Genera una llamada a funcion y sus parametros.
    * Salidas: Agrega las instrucciones de parametros y llamada.
