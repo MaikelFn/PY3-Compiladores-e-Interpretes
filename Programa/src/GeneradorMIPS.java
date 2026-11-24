@@ -14,6 +14,7 @@ public class GeneradorMIPS {
 
   private final List<String> codigoIntermedio = new ArrayList<>();
   private final List<String> codigoMIPS = new ArrayList<>();
+  private final List<String> cadenas = new ArrayList<>();
 
   /**
    * Nombre: leerCodigoIntermedio
@@ -36,12 +37,13 @@ public class GeneradorMIPS {
 
   /**
    * Nombre: generar
-   * Descripcion: Genera las secciones del codigo ensamblador MIPS
-   * y procesa las declaraciones de variables globales.
+   * Descripcion: Genera las secciones del codigo ensamblador MIPS,
+   * las declaraciones globales y los literales de cadenas.
    * Salidas: Codigo MIPS almacenado en memoria.
    */
   public void generar() {
     codigoMIPS.clear();
+    cadenas.clear();
 
     codigoMIPS.add(".data");
 
@@ -56,6 +58,8 @@ public class GeneradorMIPS {
         generarDeclaracionGlobal(instruccion);
       }
     }
+
+    generarLiteralesCadena();
 
     codigoMIPS.add("");
     codigoMIPS.add(".text");
@@ -128,6 +132,49 @@ public class GeneradorMIPS {
 
     codigoMIPS.add("    .align 2");
     codigoMIPS.add("    " + nombre + ": .space " + espacio);
+  }
+
+  /**
+   * Nombre: generarLiteralesCadena
+   * Descripcion: Busca los literales de cadena en el codigo
+   * intermedio y los declara en la seccion de datos.
+   * Salidas: Etiquetas .asciiz agregadas a la seccion de datos.
+   */
+  private void generarLiteralesCadena() {
+    for (String instruccion : codigoIntermedio) {
+      java.util.regex.Matcher coincidencias =
+          java.util.regex.Pattern
+              .compile("\"[^\"]*\"")
+              .matcher(instruccion);
+
+      while (coincidencias.find()) {
+        registrarCadena(coincidencias.group());
+      }
+    }
+  }
+
+  /**
+   * Nombre: registrarCadena
+   * Descripcion: Registra una cadena literal evitando duplicados.
+   * Entradas: Literal de cadena.
+   * Salidas: Etiqueta asociada a la cadena.
+   *
+   * @param literal Cadena que se desea registrar.
+   * @return Etiqueta de la cadena en MIPS.
+   */
+  private String registrarCadena(String literal) {
+    int posicion = cadenas.indexOf(literal);
+
+    if (posicion == -1) {
+      posicion = cadenas.size();
+
+      cadenas.add(literal);
+
+      codigoMIPS.add("    __cadena" + posicion
+          + ": .asciiz " + literal);
+    }
+
+    return "__cadena" + posicion;
   }
 
   /**
