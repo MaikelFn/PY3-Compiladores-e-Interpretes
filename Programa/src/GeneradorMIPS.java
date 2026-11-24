@@ -20,6 +20,21 @@ public class GeneradorMIPS {
   private final List<String> nombresLocales = new ArrayList<>();
   private final List<String> tiposLocales = new ArrayList<>();
   private final List<Integer> desplazamientosLocales = new ArrayList<>();
+  private final List<String> nombresGlobales = new ArrayList<>();
+  private final List<String> tiposGlobales = new ArrayList<>();
+  private final List<String> nombresTemporales = new ArrayList<>();
+  private final List<String> tiposTemporales = new ArrayList<>();
+  private final List<String> registrosTemporales = new ArrayList<>();
+
+  private final String[] registrosEnteros = {
+      "$t0", "$t1", "$t2", "$t3",
+      "$t4", "$t5", "$t6", "$t7"
+  };
+
+  private final String[] registrosFlotantes = {
+      "$f2", "$f4", "$f6", "$f8",
+      "$f10", "$f14", "$f16", "$f18"
+  };
 
   /**
    * Nombre: leerCodigoIntermedio
@@ -48,6 +63,13 @@ public class GeneradorMIPS {
   public void generar() {
     codigoMIPS.clear();
     cadenas.clear();
+
+    nombresGlobales.clear();
+    tiposGlobales.clear();
+
+    nombresTemporales.clear();
+    tiposTemporales.clear();
+    registrosTemporales.clear();
 
     generarSeccionData();
     generarSeccionText();
@@ -88,14 +110,40 @@ public class GeneradorMIPS {
     codigoMIPS.add(".text");
     codigoMIPS.add(".globl main");
 
-    for (String instruccion : codigoIntermedio) {
-      instruccion = instruccion.trim();
+    for (int i = 0; i < codigoIntermedio.size(); i++) {
+      String instruccion = codigoIntermedio.get(i).trim();
 
       if (instruccion.startsWith("func ")) {
         generarInicioFuncion(instruccion);
+
       } else if (instruccion.startsWith("endfunc ")) {
         generarFinFuncion();
+
+      } else if (instruccion.startsWith("temp_")) {
+        registrarTemporal(instruccion);
+
+      } else if (funcionActual != null
+          && instruccion.contains(" = ")) {
+
+        String[] partes = instruccion.split(" = ", 2);
+
+        String destino = partes[0].trim();
+        String origen = partes[1].trim();
+
+        if (nombresTemporales.contains(destino)
+            && esLiteral(origen)) {
+
+          generarAsignacionLiteral(destino, origen);
+
+        } else if ((esVariableLocal(destino)
+                || esVariableGlobal(destino))
+            && nombresTemporales.contains(origen)) {
+
+          generarAsignacionDesdeTemporal(destino, origen);
+        }
       }
+
+      liberarTemporalesSinUso(i);
     }
   }
 
@@ -177,6 +225,60 @@ public class GeneradorMIPS {
     desplazamientosLocales.add(desplazamiento);
 
     return espacio;
+  }
+
+  /**
+   * Nombre: esVariableLocal
+   * Descripcion: Verifica si una variable pertenece
+   * a la funcion actual.
+   * Entradas: Nombre de la variable.
+   * Salidas: Resultado de la busqueda.
+   *
+   * @param nombre Nombre de la variable.
+   * @return true si la variable es local, false en caso contrario.
+   */
+  private boolean esVariableLocal(String nombre) {
+    return funcionActual != null
+        && nombresLocales.contains(nombre);
+  }
+
+  /**
+   * Nombre: obtenerTipoLocal
+   * Descripcion: Obtiene el tipo de dato de una variable local.
+   * Entradas: Nombre de la variable.
+   * Salidas: Tipo de dato de la variable.
+   *
+   * @param nombre Nombre de la variable.
+   * @return Tipo de dato o null si la variable no existe.
+   */
+  private String obtenerTipoLocal(String nombre) {
+    int posicion = nombresLocales.indexOf(nombre);
+
+    if (posicion == -1) {
+      return null;
+    }
+
+    return tiposLocales.get(posicion);
+  }
+
+  /**
+   * Nombre: obtenerDesplazamientoLocal
+   * Descripcion: Obtiene el desplazamiento de una variable
+   * local dentro del marco de pila.
+   * Entradas: Nombre de la variable.
+   * Salidas: Desplazamiento respecto al registro $sp.
+   *
+   * @param nombre Nombre de la variable.
+   * @return Desplazamiento o -1 si la variable no existe.
+   */
+  private int obtenerDesplazamientoLocal(String nombre) {
+    int posicion = nombresLocales.indexOf(nombre);
+
+    if (posicion == -1) {
+      return -1;
+    }
+
+    return desplazamientosLocales.get(posicion);
   }
 
   /**
@@ -263,8 +365,17 @@ public class GeneradorMIPS {
     String tipo = partes[0].substring(5);
     String nombre = partes[1];
 
-    if (nombre.contains("[")) {
+    boolean esArreglo = nombre.contains("[");
+
+    if (esArreglo) {
       generarDeclaracionArregloGlobal(tipo, nombre);
+      nombre = nombre.substring(0, nombre.indexOf("["));
+    }
+
+    nombresGlobales.add(nombre);
+    tiposGlobales.add(tipo);
+
+    if (esArreglo) {
       return;
     }
 
@@ -311,6 +422,408 @@ public class GeneradorMIPS {
 
     codigoMIPS.add("    .align 2");
     codigoMIPS.add("    " + nombre + ": .space " + espacio);
+  }
+
+  /**
+   * Nombre: esVariableGlobal
+   * Descripcion: Verifica si una variable es global.
+   * Entradas: Nombre de la variable.
+   * Salidas: Resultado de la busqueda.
+   *
+   * @param nombre Nombre de la variable.
+   * @return true si la variable es global, false en caso contrario.
+   */
+  private boolean esVariableGlobal(String nombre) {
+    return nombresGlobales.contains(nombre);
+  }
+
+  /**
+   * Nombre: obtenerTipoGlobal
+   * Descripcion: Obtiene el tipo de dato de una variable global.
+   * Entradas: Nombre de la variable.
+   * Salidas: Tipo de dato de la variable.
+   *
+   * @param nombre Nombre de la variable.
+   * @return Tipo de dato o null si la variable no existe.
+   */
+  private String obtenerTipoGlobal(String nombre) {
+    int posicion = nombresGlobales.indexOf(nombre);
+
+    if (posicion == -1) {
+      return null;
+    }
+
+    return tiposGlobales.get(posicion);
+  }
+
+  /**
+   * Nombre: esLiteral
+   * Descripcion: Verifica si un operando corresponde
+   * a un valor literal del codigo intermedio.
+   * Entradas: Operando que se desea verificar.
+   * Salidas: Resultado de la verificacion.
+   *
+   * @param operando Operando del codigo intermedio.
+   * @return true si es literal, false en caso contrario.
+   */
+  private boolean esLiteral(String operando) {
+    return operando.equals("true")
+        || operando.equals("false")
+        || operando.matches("-?[0-9]+")
+        || operando.matches("-?[0-9]+\\.[0-9]+")
+        || operando.matches("\"[^\"]*\"")
+        || operando.matches("'[^']'");
+  }
+
+  /**
+   * Nombre: obtenerTipoOperando
+   * Descripcion: Identifica el tipo de dato de un temporal,
+   * variable local, variable global o literal.
+   * Entradas: Operando del codigo intermedio.
+   * Salidas: Tipo de dato del operando.
+   *
+   * @param operando Operando que se desea consultar.
+   * @return Tipo de dato del operando.
+   */
+  private String obtenerTipoOperando(String operando) {
+    int posicion = nombresTemporales.indexOf(operando);
+
+    if (posicion != -1) {
+      return tiposTemporales.get(posicion);
+    }
+
+    if (esVariableLocal(operando)) {
+      return obtenerTipoLocal(operando);
+    }
+
+    if (esVariableGlobal(operando)) {
+      return obtenerTipoGlobal(operando);
+    }
+
+    if (operando.equals("true") || operando.equals("false")) {
+      return "bool";
+    }
+
+    if (operando.startsWith("\"") && operando.endsWith("\"")) {
+      return "string";
+    }
+
+    if (operando.startsWith("'") && operando.endsWith("'")) {
+      return "char";
+    }
+
+    if (operando.matches("-?[0-9]+")) {
+      return "int";
+    }
+
+    if (operando.matches("-?[0-9]+\\.[0-9]+")) {
+      return "float";
+    }
+
+    throw new IllegalArgumentException(
+        "Operando no reconocido: " + operando
+    );
+  }
+
+  /**
+   * Nombre: cargarLiteral
+   * Descripcion: Genera la instruccion MIPS necesaria
+   * para cargar un literal en un registro.
+   * Entradas: Literal y registro destino.
+   * Salidas: Instruccion de carga en codigo MIPS.
+   *
+   * @param literal Valor literal del codigo intermedio.
+   * @param registro Registro MIPS destino.
+   */
+  private void cargarLiteral(String literal, String registro) {
+    String tipo = obtenerTipoOperando(literal);
+
+    switch (tipo) {
+      case "int":
+        codigoMIPS.add("    li " + registro + ", " + literal);
+        break;
+
+      case "float":
+        codigoMIPS.add("    li.s " + registro + ", " + literal);
+        break;
+
+      case "bool":
+        int valor = literal.equals("true") ? 1 : 0;
+        codigoMIPS.add("    li " + registro + ", " + valor);
+        break;
+
+      case "char":
+        int caracter = literal.charAt(1);
+        codigoMIPS.add("    li " + registro + ", " + caracter);
+        break;
+
+      case "string":
+        String etiqueta = registrarCadena(literal);
+        codigoMIPS.add("    la " + registro + ", " + etiqueta);
+        break;
+    }
+  }
+
+  /**
+   * Nombre: generarAsignacionLiteral
+   * Descripcion: Asigna un registro a un temporal
+   * y carga el valor literal correspondiente.
+   * Entradas: Nombre del temporal y valor literal.
+   * Salidas: Instruccion de asignacion en codigo MIPS.
+   *
+   * @param temporal Nombre del temporal.
+   * @param literal Valor que se desea asignar.
+   */
+  private void generarAsignacionLiteral(String temporal,
+                                        String literal) {
+    String registro = asignarRegistroTemporal(temporal);
+
+    if (registro == null) {
+      throw new IllegalStateException(
+          "No hay registros disponibles para: " + temporal
+      );
+    }
+
+    cargarLiteral(literal, registro);
+  }
+
+  /**
+   * Nombre: generarAsignacionDesdeTemporal
+   * Descripcion: Almacena el valor de un temporal
+   * en una variable local o global.
+   * Entradas: Variable destino y temporal origen.
+   * Salidas: Instruccion de almacenamiento en MIPS.
+   *
+   * @param destino Nombre de la variable destino.
+   * @param temporal Nombre del temporal origen.
+   */
+  private void generarAsignacionDesdeTemporal(String destino,
+                                              String temporal) {
+    int posicion = nombresTemporales.indexOf(temporal);
+
+    String registro = registrosTemporales.get(posicion);
+
+    if (registro == null) {
+      throw new IllegalStateException(
+          "Temporal sin registro asignado: " + temporal
+      );
+    }
+
+    almacenarVariable(destino, registro);
+  }
+
+  /**
+   * Nombre: cargarVariable
+   * Descripcion: Carga el valor de una variable local
+   * o global en un registro MIPS.
+   * Entradas: Nombre de la variable y registro destino.
+   * Salidas: Instruccion de carga en codigo MIPS.
+   *
+   * @param nombre Nombre de la variable.
+   * @param registro Registro destino.
+   */
+  private void cargarVariable(String nombre, String registro) {
+    accederVariable(nombre, registro, true);
+  }
+
+  /**
+   * Nombre: almacenarVariable
+   * Descripcion: Almacena el contenido de un registro
+   * MIPS en una variable local o global.
+   * Entradas: Nombre de la variable y registro origen.
+   * Salidas: Instruccion de almacenamiento en codigo MIPS.
+   *
+   * @param nombre Nombre de la variable.
+   * @param registro Registro origen.
+   */
+  private void almacenarVariable(String nombre, String registro) {
+    accederVariable(nombre, registro, false);
+  }
+
+  /**
+   * Nombre: accederVariable
+   * Descripcion: Genera una instruccion de carga o
+   * almacenamiento para una variable local o global.
+   * Entradas: Nombre, registro y tipo de acceso.
+   * Salidas: Instruccion de acceso a memoria.
+   *
+   * @param nombre Nombre de la variable.
+   * @param registro Registro MIPS.
+   * @param cargar true para cargar, false para almacenar.
+   */
+  private void accederVariable(String nombre, String registro,
+                               boolean cargar) {
+    String tipo;
+    String direccion;
+    String operacion;
+
+    boolean local = esVariableLocal(nombre);
+
+    if (local) {
+      tipo = obtenerTipoLocal(nombre);
+      direccion = obtenerDesplazamientoLocal(nombre) + "($sp)";
+
+    } else if (esVariableGlobal(nombre)) {
+      tipo = obtenerTipoGlobal(nombre);
+      direccion = nombre;
+
+    } else {
+      throw new IllegalArgumentException(
+          "Variable no registrada: " + nombre
+      );
+    }
+
+    if (tipo.equals("float")) {
+      operacion = cargar ? "l.s" : "s.s";
+
+    } else if (tipo.equals("char") && !local) {
+      operacion = cargar ? "lbu" : "sb";
+
+    } else {
+      operacion = cargar ? "lw" : "sw";
+    }
+
+    codigoMIPS.add("    " + operacion + " "
+        + registro + ", " + direccion);
+  }
+
+  /**
+   * Nombre: registrarTemporal
+   * Descripcion: Registra el nombre y tipo de un temporal
+   * del codigo intermedio.
+   * Entradas: Declaracion del temporal.
+   * Salidas: Temporal registrado en las listas.
+   *
+   * @param instruccion Declaracion del temporal.
+   */
+  private void registrarTemporal(String instruccion) {
+    String[] partes = instruccion.split("\\s+", 2);
+
+    String tipo = partes[0].substring(5);
+    String nombre = partes[1];
+
+    nombresTemporales.add(nombre);
+    tiposTemporales.add(tipo);
+    registrosTemporales.add(null);
+  }
+
+  /**
+   * Nombre: asignarRegistroTemporal
+   * Descripcion: Asigna un registro MIPS disponible
+   * a un temporal del codigo intermedio.
+   * Entradas: Nombre del temporal.
+   * Salidas: Registro MIPS asignado.
+   *
+   * @param nombre Nombre del temporal.
+   * @return Registro asignado o null si no hay disponibles.
+   */
+  private String asignarRegistroTemporal(String nombre) {
+    int posicion = nombresTemporales.indexOf(nombre);
+
+    if (posicion == -1) {
+      throw new IllegalArgumentException(
+          "Temporal no registrado: " + nombre
+      );
+    }
+
+    String registro = registrosTemporales.get(posicion);
+
+    if (registro != null) {
+      return registro;
+    }
+
+    String tipo = tiposTemporales.get(posicion);
+
+    String[] disponibles = tipo.equals("float")
+        ? registrosFlotantes
+        : registrosEnteros;
+
+    for (String candidato : disponibles) {
+      if (!registrosTemporales.contains(candidato)) {
+        registrosTemporales.set(posicion, candidato);
+        return candidato;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Nombre: liberarRegistroTemporal
+   * Descripcion: Libera el registro MIPS asignado a un temporal.
+   * Entradas: Nombre del temporal.
+   * Salidas: Registro disponible para una nueva asignacion.
+   *
+   * @param nombre Nombre del temporal.
+   */
+  private void liberarRegistroTemporal(String nombre) {
+    int posicion = nombresTemporales.indexOf(nombre);
+
+    if (posicion != -1) {
+      registrosTemporales.set(posicion, null);
+    }
+  }
+
+  /**
+   * Nombre: tieneUsoPosterior
+   * Descripcion: Busca referencias posteriores a un temporal
+   * dentro de la misma funcion o seccion global.
+   * Entradas: Nombre del temporal y posicion actual.
+   * Salidas: Resultado de la busqueda.
+   *
+   * @param nombre Nombre del temporal.
+   * @param posicion Posicion actual en el codigo intermedio.
+   * @return true si existe una referencia posterior.
+   */
+  private boolean tieneUsoPosterior(String nombre, int posicion) {
+    for (int i = posicion + 1; i < codigoIntermedio.size(); i++) {
+      String instruccion = codigoIntermedio.get(i).trim();
+
+      if (instruccion.startsWith("endfunc ")
+          || instruccion.startsWith("func ")) {
+        break;
+      }
+
+      if (instruccion.startsWith("temp_")
+          || instruccion.startsWith("data_")
+          || instruccion.startsWith("param_")) {
+        continue;
+      }
+
+      instruccion = instruccion.replaceAll("\"[^\"]*\"|'[^']*'", "");
+
+      String[] partes = instruccion.split("[^\\p{L}\\p{N}_]+");
+
+      for (String parte : partes) {
+        if (parte.equals(nombre)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Nombre: liberarTemporalesSinUso
+   * Descripcion: Libera los registros de temporales que
+   * no presentan referencias posteriores.
+   * Entradas: Posicion actual del codigo intermedio.
+   * Salidas: Registros disponibles para nuevas asignaciones.
+   * Restricciones: Aplicable a secuencias de ejecucion lineal.
+   *
+   * @param posicion Posicion actual de la instruccion.
+   */
+  private void liberarTemporalesSinUso(int posicion) {
+    for (int i = 0; i < nombresTemporales.size(); i++) {
+      String nombre = nombresTemporales.get(i);
+      String registro = registrosTemporales.get(i);
+
+      if (registro != null
+          && !tieneUsoPosterior(nombre, posicion)) {
+        liberarRegistroTemporal(nombre);
+      }
+    }
   }
 
   /**
