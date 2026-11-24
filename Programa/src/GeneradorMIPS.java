@@ -38,7 +38,8 @@ public class GeneradorMIPS {
   /**
    * Nombre: generar
    * Descripcion: Genera las secciones del codigo ensamblador MIPS,
-   * las declaraciones globales y los literales de cadenas.
+   * las declaraciones globales, los literales de cadenas
+   * y la seccion de instrucciones.
    * Salidas: Codigo MIPS almacenado en memoria.
    */
   public void generar() {
@@ -60,9 +61,70 @@ public class GeneradorMIPS {
     }
 
     generarLiteralesCadena();
+    generarSeccionText();
+  }
 
+  /**
+   * Nombre: generarSeccionText
+   * Descripcion: Genera la seccion de instrucciones MIPS
+   * y procesa el inicio y final de las funciones.
+   * Salidas: Seccion de instrucciones del codigo MIPS.
+   */
+  private void generarSeccionText() {
     codigoMIPS.add("");
     codigoMIPS.add(".text");
+    codigoMIPS.add(".globl main");
+
+    for (String instruccion : codigoIntermedio) {
+      instruccion = instruccion.trim();
+
+      if (instruccion.startsWith("func ")) {
+        generarInicioFuncion(instruccion);
+      } else if (instruccion.startsWith("endfunc ")) {
+        generarFinFuncion(instruccion);
+      }
+    }
+  }
+
+  /**
+   * Nombre: generarInicioFuncion
+   * Descripcion: Genera la etiqueta de inicio de una funcion.
+   * Entradas: Instruccion de inicio de funcion.
+   * Salidas: Etiqueta de la funcion en MIPS.
+   *
+   * @param instruccion Inicio de funcion del codigo intermedio.
+   */
+  private void generarInicioFuncion(String instruccion) {
+    String nombre = instruccion.substring(5).replace(":", "").trim();
+
+    codigoMIPS.add("");
+
+    if (nombre.equals("principal")) {
+      codigoMIPS.add("main:");
+    } else {
+      codigoMIPS.add(nombre + ":");
+    }
+  }
+
+  /**
+   * Nombre: generarFinFuncion
+   * Descripcion: Genera las instrucciones de finalizacion
+   * de una funcion.
+   * Entradas: Instruccion de finalizacion de funcion.
+   * Salidas: Instrucciones MIPS de retorno o finalizacion.
+   *
+   * @param instruccion Final de funcion del codigo intermedio.
+   */
+  private void generarFinFuncion(String instruccion) {
+    String nombre = instruccion.substring(8).trim();
+
+    if (nombre.equals("principal")) {
+      codigoMIPS.add("    li $v0, 10");
+      codigoMIPS.add("    syscall");
+    } else {
+      codigoMIPS.add("    jr $ra");
+      codigoMIPS.add("    nop");
+    }
   }
 
   /**
