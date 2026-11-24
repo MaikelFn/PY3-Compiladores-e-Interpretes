@@ -140,6 +140,32 @@ public class GeneradorMIPS {
             && nombresTemporales.contains(origen)) {
 
           generarAsignacionDesdeTemporal(destino, origen);
+
+        } else if ((esVariableLocal(destino)
+                || esVariableGlobal(destino))
+            && (esVariableLocal(origen)
+                || esVariableGlobal(origen))) {
+
+          generarAsignacionEntreVariables(destino, origen);
+
+        } else if (nombresTemporales.contains(destino)
+            && (esVariableLocal(origen)
+                || esVariableGlobal(origen))) {
+
+          generarAsignacionDesdeVariable(destino, origen);
+
+        } else if (nombresTemporales.contains(destino)
+            && (origen.contains(" + ")
+                || origen.contains(" - "))) {
+
+          String[] operandos = origen.split("\\s+", 3);
+
+          generarOperacionAritmetica(
+              destino,
+              operandos[0],
+              operandos[1],
+              operandos[2]
+          );
         }
       }
 
@@ -206,8 +232,7 @@ public class GeneradorMIPS {
    * @param desplazamiento Posicion de la variable en la pila.
    * @return Espacio ocupado por la variable.
    */
-  private int registrarVariableLocal(String instruccion,
-                                     int desplazamiento) {
+  private int registrarVariableLocal(String instruccion, int desplazamiento) {
     String[] partes = instruccion.split("\\s+", 2);
 
     String tipo = partes[0].substring(5);
@@ -407,9 +432,7 @@ public class GeneradorMIPS {
    * @param tipo Tipo de dato del arreglo.
    * @param declaracion Nombre y dimension del arreglo.
    */
-  private void generarDeclaracionArregloGlobal(
-      String tipo, String declaracion
-  ) {
+  private void generarDeclaracionArregloGlobal(String tipo, String declaracion) {
     if (!tipo.equals("int") && !tipo.equals("float")) {
       return;
     }
@@ -574,8 +597,7 @@ public class GeneradorMIPS {
    * @param temporal Nombre del temporal.
    * @param literal Valor que se desea asignar.
    */
-  private void generarAsignacionLiteral(String temporal,
-                                        String literal) {
+  private void generarAsignacionLiteral(String temporal, String literal) {
     String registro = asignarRegistroTemporal(temporal);
 
     if (registro == null) {
@@ -597,8 +619,7 @@ public class GeneradorMIPS {
    * @param destino Nombre de la variable destino.
    * @param temporal Nombre del temporal origen.
    */
-  private void generarAsignacionDesdeTemporal(String destino,
-                                              String temporal) {
+  private void generarAsignacionDesdeTemporal(String destino, String temporal) {
     int posicion = nombresTemporales.indexOf(temporal);
 
     String registro = registrosTemporales.get(posicion);
@@ -610,6 +631,144 @@ public class GeneradorMIPS {
     }
 
     almacenarVariable(destino, registro);
+  }
+
+  /**
+   * Nombre: generarAsignacionEntreVariables
+   * Descripcion: Copia el valor de una variable
+   * local o global hacia otra variable.
+   * Entradas: Variable destino y variable origen.
+   * Salidas: Instrucciones de carga y almacenamiento MIPS.
+   *
+   * @param destino Nombre de la variable destino.
+   * @param origen Nombre de la variable origen.
+   */
+  private void generarAsignacionEntreVariables(String destino, String origen) {
+    String tipo = obtenerTipoOperando(origen);
+
+    String registro = tipo.equals("float") ? "$f20" : "$t8";
+
+    cargarVariable(origen, registro);
+    almacenarVariable(destino, registro);
+  }
+
+  /**
+   * Nombre: generarAsignacionDesdeVariable
+   * Descripcion: Carga el valor de una variable
+   * local o global en el registro de un temporal.
+   * Entradas: Temporal destino y variable origen.
+   * Salidas: Instruccion de carga en MIPS.
+   *
+   * @param temporal Nombre del temporal destino.
+   * @param origen Nombre de la variable origen.
+   */
+  private void generarAsignacionDesdeVariable(String temporal, String origen) {
+    String registro = asignarRegistroTemporal(temporal);
+
+    if (registro == null) {
+      throw new IllegalStateException(
+          "No hay registros disponibles para: " + temporal
+      );
+    }
+
+    cargarVariable(origen, registro);
+  }
+
+  /**
+   * Nombre: obtenerRegistroOperando
+   * Descripcion: Obtiene el registro que contiene
+   * el valor de un temporal, variable o literal.
+   * Entradas: Operando y registros auxiliares.
+   * Salidas: Registro MIPS que contiene el operando.
+   *
+   * @param operando Operando del codigo intermedio.
+   * @param registroEntero Registro auxiliar entero.
+   * @param registroFloat Registro auxiliar flotante.
+   * @return Registro que contiene el operando.
+   */
+  private String obtenerRegistroOperando(String operando,
+                                         String registroEntero,
+                                         String registroFloat) {
+    int posicion = nombresTemporales.indexOf(operando);
+
+    if (posicion != -1) {
+      String registro = registrosTemporales.get(posicion);
+
+      if (registro == null) {
+        throw new IllegalStateException(
+            "Temporal sin registro asignado: " + operando
+        );
+      }
+
+      return registro;
+    }
+
+    String tipo = obtenerTipoOperando(operando);
+
+    String registro = tipo.equals("float")
+        ? registroFloat : registroEntero;
+
+    if (esLiteral(operando)) {
+      cargarLiteral(operando, registro);
+    } else {
+      cargarVariable(operando, registro);
+    }
+
+    return registro;
+  }
+
+  /**
+   * Nombre: generarOperacionAritmetica
+   * Descripcion: Traduce una operacion aritmetica
+   * del codigo intermedio a instrucciones MIPS.
+   * Entradas: Temporal destino, operandos y operador.
+   * Salidas: Instrucciones aritmeticas MIPS.
+   *
+   * @param destino Temporal que almacena el resultado.
+   * @param operando1 Primer operando.
+   * @param operador Operador aritmetico.
+   * @param operando2 Segundo operando.
+   */
+  private void generarOperacionAritmetica(String destino, String operando1, String operador, String operando2) {
+    String registro1 = obtenerRegistroOperando(
+        operando1, "$t8", "$f20"
+    );
+
+    String registro2 = obtenerRegistroOperando(
+        operando2, "$t9", "$f22"
+    );
+
+    String registroDestino = asignarRegistroTemporal(destino);
+
+    if (registroDestino == null) {
+      throw new IllegalStateException(
+          "No hay registros disponibles para: " + destino
+      );
+    }
+
+    String tipo = obtenerTipoOperando(destino);
+
+    String operacion;
+
+    switch (operador) {
+      case "+":
+        operacion = tipo.equals("float") ? "add.s" : "addu";
+        break;
+
+      case "-":
+        operacion = tipo.equals("float") ? "sub.s" : "subu";
+        break;
+
+      default:
+        throw new IllegalArgumentException(
+            "Operador no implementado: " + operador
+        );
+    }
+
+    codigoMIPS.add("    " + operacion + " "
+        + registroDestino + ", "
+        + registro1 + ", "
+        + registro2);
   }
 
   /**
@@ -651,8 +810,7 @@ public class GeneradorMIPS {
    * @param registro Registro MIPS.
    * @param cargar true para cargar, false para almacenar.
    */
-  private void accederVariable(String nombre, String registro,
-                               boolean cargar) {
+  private void accederVariable(String nombre, String registro, boolean cargar) {
     String tipo;
     String direccion;
     String operacion;
