@@ -30,6 +30,7 @@ public class Main {
         String rutaErroresSemanticos = "salida/errores_semanticos.txt";
         String rutaTablaSimbolos = "salida/tabla_simbolos.txt";
         String rutaCodigoIntermedio = "salida/codigo_intermedio.txt";
+        String rutaCodigoMIPS = "salida/Prueba.asm";
 
         boolean huboErroresLexicos = analizarLexico(
             rutaEntrada,
@@ -42,7 +43,8 @@ public class Main {
             rutaErroresSintacticos,
             rutaErroresSemanticos,
             rutaTablaSimbolos,
-            rutaCodigoIntermedio
+            rutaCodigoIntermedio,
+            rutaCodigoMIPS
         );
 
         boolean aceptado = !huboErroresLexicos && !huboErroresSintacticos;
@@ -200,7 +202,8 @@ public class Main {
         String rutaErroresSintacticos,
         String rutaErroresSemanticos,
         String rutaTablaSimbolos,
-        String rutaCodigoIntermedio
+        String rutaCodigoIntermedio,
+        String rutaCodigoMIPS
     ) {
 
         Parser parser = null;
@@ -304,13 +307,26 @@ public class Main {
         if (parser != null) {
             try {
                 parser.getGenerador().guardar(rutaCodigoIntermedio);
+
                 System.out.println(
                     "Codigo intermedio guardado en: "
                     + rutaCodigoIntermedio
                 );
+
+                GeneradorMIPS generadorMIPS = new GeneradorMIPS();
+
+                generadorMIPS.leerCodigoIntermedio(rutaCodigoIntermedio);
+                generadorMIPS.generar();
+                generadorMIPS.guardar(rutaCodigoMIPS);
+
+                System.out.println(
+                    "Codigo MIPS guardado en: "
+                    + rutaCodigoMIPS
+                );
+
             } catch (IOException e) {
                 System.out.println(
-                    "Error al guardar codigo intermedio: "
+                    "Error al generar archivos de salida: "
                     + e.getMessage()
                 );
             }
