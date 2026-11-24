@@ -1253,7 +1253,7 @@ non terminal ResultadoExpresion EXPRESION;
 
 non terminal OP_NEG;
 
-non terminal String EXPR_NEGATIVO;
+non terminal ResultadoExpresion EXPR_NEGATIVO;
 non terminal String EXPR_INCREMENTO;
 non terminal String EXPR_DECREMENTO;
 
@@ -1739,10 +1739,18 @@ OP_NEG ::=
 /* ---- Expresion negativa ---- */
 
 EXPR_NEGATIVO ::=
-      OP_NEG LIT_INT
-      {: RESULT = "int"; :}
-    | OP_NEG LIT_FLOAT
-      {: RESULT = "float"; :}
+      OP_NEG LIT_INT:valor
+      {:
+          RESULT = generador.crearNegativo(
+              generador.crearResultado("int", (String) valor)
+          );
+      :}
+    | OP_NEG LIT_FLOAT:valor
+      {:
+          RESULT = generador.crearNegativo(
+              generador.crearResultado("float", (String) valor)
+          );
+      :}
     ;
 
 
@@ -1809,7 +1817,7 @@ OPERANDO ::=
       {: RESULT = gp; :}
 
     | EXPR_NEGATIVO:en
-      {: RESULT = generador.crearResultado(en, null); :}
+      {: RESULT = en; :}
 
     | EXPR_INCREMENTO:ei
       {: RESULT = generador.crearResultado(ei, null); :}
