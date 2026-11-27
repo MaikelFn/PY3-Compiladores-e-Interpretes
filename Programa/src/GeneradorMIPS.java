@@ -17,6 +17,7 @@ public class GeneradorMIPS {
   private final List<String> cadenas = new ArrayList<>();
   private String funcionActual = null;
   private int espacioPila = 0;
+  private boolean utilizaPotencia = false;
   private final List<String> nombresLocales = new ArrayList<>();
   private final List<String> tiposLocales = new ArrayList<>();
   private final List<Integer> desplazamientosLocales = new ArrayList<>();
@@ -71,8 +72,14 @@ public class GeneradorMIPS {
     tiposTemporales.clear();
     registrosTemporales.clear();
 
+    utilizaPotencia = false;
+
     generarSeccionData();
     generarSeccionText();
+
+    if (utilizaPotencia) {
+      generarSubrutinaPotencia();
+    }
   }
 
   /**
@@ -160,7 +167,8 @@ public class GeneradorMIPS {
                 || origen.contains(" * ")
                 || origen.contains(" / ")
                 || origen.contains(" // ")
-                || origen.contains(" mod "))) {
+                || origen.contains(" mod ")
+                || origen.contains(" pot "))) {
 
           String[] operandos = origen.split("\\s+", 3);
 
@@ -745,6 +753,67 @@ public class GeneradorMIPS {
   }
 
   /**
+   * Nombre: generarPotencia
+   * Descripcion: Genera una llamada a la subrutina
+   * encargada de calcular potencias enteras.
+   * Entradas: Registros del destino, base y exponente.
+   * Salidas: Instrucciones MIPS para llamar a la subrutina.
+   * Restricciones: El exponente debe ser mayor que cero.
+   *
+   * @param registroDestino Registro del resultado.
+   * @param registroBase Registro de la base.
+   * @param registroExponente Registro del exponente.
+   */
+  private void generarPotencia(
+      String registroDestino,
+      String registroBase,
+      String registroExponente
+  ) {
+    utilizaPotencia = true;
+
+    codigoMIPS.add("    move $a0, " + registroBase);
+    codigoMIPS.add("    move $a1, " + registroExponente);
+
+    codigoMIPS.add("    jal __potencia");
+    codigoMIPS.add("    nop");
+
+    codigoMIPS.add("    move " + registroDestino + ", $v0");
+  }
+
+  /**
+   * Nombre: generarSubrutinaPotencia
+   * Descripcion: Genera una subrutina reutilizable para
+   * calcular potencias mediante multiplicaciones sucesivas.
+   * Entradas: Base en $a0 y exponente en $a1.
+   * Salidas: Resultado en $v0.
+   * Restricciones: El exponente debe ser mayor que cero.
+   */
+  private void generarSubrutinaPotencia() {
+    codigoMIPS.add("");
+    codigoMIPS.add("__potencia:");
+
+    codigoMIPS.add("    blez $a1, __potencia_error");
+    codigoMIPS.add("    nop");
+
+    codigoMIPS.add("    li $v0, 1");
+
+    codigoMIPS.add("__potencia_inicio:");
+
+    codigoMIPS.add("    mul $v0, $v0, $a0");
+    codigoMIPS.add("    addiu $a1, $a1, -1");
+
+    codigoMIPS.add("    bgtz $a1, __potencia_inicio");
+    codigoMIPS.add("    nop");
+
+    codigoMIPS.add("    jr $ra");
+    codigoMIPS.add("    nop");
+
+    codigoMIPS.add("__potencia_error:");
+    codigoMIPS.add("    li $v0, 10");
+    codigoMIPS.add("    syscall");
+  }
+
+  /**
    * Nombre: generarOperacionAritmetica
    * Descripcion: Traduce una operacion aritmetica
    * del codigo intermedio a instrucciones MIPS.
@@ -812,6 +881,15 @@ public class GeneradorMIPS {
         operacion = operador.equals("//") ? "mflo" : "mfhi";
 
         codigoMIPS.add("    " + operacion + " " + registroDestino);
+
+        return;
+
+      case "pot":
+        generarPotencia(
+            registroDestino,
+            registro1,
+            registro2
+        );
 
         return;
 
