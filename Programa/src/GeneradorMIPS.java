@@ -168,19 +168,6 @@ public class GeneradorMIPS {
           generarAsignacionDesdeVariable(destino, origen);
 
         } else if (nombresTemporales.contains(destino)
-            && (origen.contains(" < ")
-                || origen.contains(" > "))) {
-
-          String[] operandos = origen.split("\\s+", 3);
-
-          generarOperacionRelacional(
-              destino,
-              operandos[0],
-              operandos[1],
-              operandos[2]
-          );
-
-        } else if (nombresTemporales.contains(destino)
             && (origen.contains(" + ")
                 || origen.contains(" - ")
                 || origen.contains(" * ")
@@ -192,6 +179,23 @@ public class GeneradorMIPS {
           String[] operandos = origen.split("\\s+", 3);
 
           generarOperacionAritmetica(
+              destino,
+              operandos[0],
+              operandos[1],
+              operandos[2]
+          );
+
+        } else if (nombresTemporales.contains(destino)
+            && (origen.contains(" > ")
+                || origen.contains(" < ")
+                || origen.contains(" >= ")
+                || origen.contains(" <= ")
+                || origen.contains(" == ")
+                || origen.contains(" != "))) {
+
+          String[] operandos = origen.split("\\s+", 3);
+
+          generarOperacionRelacional(
               destino,
               operandos[0],
               operandos[1],
@@ -930,8 +934,8 @@ public class GeneradorMIPS {
    * comparar dos operandos del mismo tipo.
    * Entradas: Temporal destino, operandos y operador.
    * Salidas: Instrucciones MIPS de comparacion.
-   * Restricciones: Operadores mayor y menor,
-   * con operandos enteros o flotantes del mismo tipo.
+   * Restricciones: Los operandos deben ser del mismo
+   * tipo y compatibles con el operador relacional.
    */
   private void generarOperacionRelacional(
       String destino,
@@ -957,40 +961,106 @@ public class GeneradorMIPS {
 
     String tipo = obtenerTipoOperando(operando1);
 
-    if (operador.equals(">")) {
-      String auxiliar = registro1;
-      registro1 = registro2;
-      registro2 = auxiliar;
-    }
-
     if (tipo.equals("float")) {
+      if (operador.equals(">") || operador.equals(">=")) {
+        String auxiliar = registro1;
+        registro1 = registro2;
+        registro2 = auxiliar;
+      }
+
       generarComparacionFloat(
-          registroDestino, registro1, registro2
+          registroDestino, registro1, registro2, operador
       );
+
     } else {
-      codigoMIPS.add("    slt " + registroDestino
-          + ", " + registro1 + ", " + registro2);
+      switch (operador) {
+        case "==":
+          codigoMIPS.add("    xor " + registroDestino
+              + ", " + registro1 + ", " + registro2);
+
+          codigoMIPS.add("    sltiu " + registroDestino
+              + ", " + registroDestino + ", 1");
+          break;
+
+        case "!=":
+          codigoMIPS.add("    xor " + registroDestino
+              + ", " + registro1 + ", " + registro2);
+
+          codigoMIPS.add("    sltu " + registroDestino
+              + ", $zero, " + registroDestino);
+          break;
+
+        case ">":
+        case "<":
+        case ">=":
+        case "<=":
+          if (operador.equals(">") || operador.equals("<=")) {
+            String auxiliar = registro1;
+            registro1 = registro2;
+            registro2 = auxiliar;
+          }
+
+          codigoMIPS.add("    slt " + registroDestino
+              + ", " + registro1 + ", " + registro2);
+
+          if (operador.equals(">=") || operador.equals("<=")) {
+            codigoMIPS.add("    xori " + registroDestino
+                + ", " + registroDestino + ", 1");
+          }
+          break;
+
+        default:
+          throw new IllegalArgumentException(
+              "Operador relacional no reconocido: " + operador
+          );
+      }
     }
   }
 
   /**
    * Nombre: generarComparacionFloat
    * Descripcion: Genera la llamada a la subrutina
-   * de comparacion de flotantes.
-   * Entradas: Registro destino y registros operandos.
+   * correspondiente para comparar flotantes.
+   * Entradas: Registro destino, registros operandos
+   * y operador relacional.
    * Salidas: Instrucciones MIPS para realizar la llamada.
    */
   private void generarComparacionFloat(
       String registroDestino,
       String registro1,
-      String registro2
+      String registro2,
+      String operador
   ) {
     utilizaComparacionFloat = true;
 
     codigoMIPS.add("    mov.s $f12, " + registro1);
     codigoMIPS.add("    mov.s $f24, " + registro2);
 
-    codigoMIPS.add("    jal __compararFloat");
+    switch (operador) {
+      case ">":
+      case "<":
+        codigoMIPS.add("    jal __compararFloat");
+        break;
+
+      case ">=":
+      case "<=":
+        codigoMIPS.add("    jal __compararFloatIgual");
+        break;
+
+      case "==":
+        codigoMIPS.add("    jal __igualdadFloat");
+        break;
+
+      case "!=":
+        codigoMIPS.add("    jal __diferenciaFloat");
+        break;
+
+      default:
+        throw new IllegalArgumentException(
+            "Operador relacional no reconocido: " + operador
+        );
+    }
+
     codigoMIPS.add("    nop");
 
     codigoMIPS.add("    move " + registroDestino + ", $v0");
@@ -998,8 +1068,8 @@ public class GeneradorMIPS {
 
   /**
    * Nombre: generarSubrutinaComparacionFloat
-   * Descripcion: Genera una subrutina MIPS que
-   * determina si el primer flotante es menor al segundo.
+   * Descripcion: Genera las subrutinas independientes
+   * para realizar comparaciones entre flotantes.
    * Entradas: Registros $f12 y $f24.
    * Salidas: Resultado booleano en $v0.
    */
@@ -1008,16 +1078,51 @@ public class GeneradorMIPS {
     codigoMIPS.add("__compararFloat:");
 
     codigoMIPS.add("    li $v0, 0");
-
     codigoMIPS.add("    c.lt.s $f12, $f24");
-
     codigoMIPS.add("    bc1f __compararFloat_fin");
     codigoMIPS.add("    nop");
-
     codigoMIPS.add("    li $v0, 1");
 
     codigoMIPS.add("__compararFloat_fin:");
+    codigoMIPS.add("    jr $ra");
+    codigoMIPS.add("    nop");
 
+    codigoMIPS.add("");
+    codigoMIPS.add("__compararFloatIgual:");
+
+    codigoMIPS.add("    li $v0, 0");
+    codigoMIPS.add("    c.le.s $f12, $f24");
+    codigoMIPS.add("    bc1f __compararFloatIgual_fin");
+    codigoMIPS.add("    nop");
+    codigoMIPS.add("    li $v0, 1");
+
+    codigoMIPS.add("__compararFloatIgual_fin:");
+    codigoMIPS.add("    jr $ra");
+    codigoMIPS.add("    nop");
+
+    codigoMIPS.add("");
+    codigoMIPS.add("__igualdadFloat:");
+
+    codigoMIPS.add("    li $v0, 0");
+    codigoMIPS.add("    c.eq.s $f12, $f24");
+    codigoMIPS.add("    bc1f __igualdadFloat_fin");
+    codigoMIPS.add("    nop");
+    codigoMIPS.add("    li $v0, 1");
+
+    codigoMIPS.add("__igualdadFloat_fin:");
+    codigoMIPS.add("    jr $ra");
+    codigoMIPS.add("    nop");
+
+    codigoMIPS.add("");
+    codigoMIPS.add("__diferenciaFloat:");
+
+    codigoMIPS.add("    li $v0, 0");
+    codigoMIPS.add("    c.eq.s $f12, $f24");
+    codigoMIPS.add("    bc1t __diferenciaFloat_fin");
+    codigoMIPS.add("    nop");
+    codigoMIPS.add("    li $v0, 1");
+
+    codigoMIPS.add("__diferenciaFloat_fin:");
     codigoMIPS.add("    jr $ra");
     codigoMIPS.add("    nop");
   }
