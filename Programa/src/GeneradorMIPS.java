@@ -201,6 +201,26 @@ public class GeneradorMIPS {
               operandos[1],
               operandos[2]
           );
+
+        } else if (nombresTemporales.contains(destino)
+            && (origen.contains(" λ ")
+                || origen.contains(" θ "))) {
+
+          String[] operandos = origen.split("\\s+", 3);
+
+          generarOperacionLogica(
+              destino,
+              operandos[0],
+              operandos[1],
+              operandos[2]
+          );
+
+        } else if (nombresTemporales.contains(destino)
+            && origen.startsWith("Σ ")) {
+
+          String operando = origen.substring(2).trim();
+
+          generarNegacionLogica(destino, operando);
         }
       }
 
@@ -1015,6 +1035,85 @@ public class GeneradorMIPS {
           );
       }
     }
+  }
+
+  /**
+   * Nombre: generarOperacionLogica
+   * Descripcion: Genera instrucciones MIPS para
+   * operaciones logicas binarias.
+   * Entradas: Temporal destino, operandos y operador.
+   * Salidas: Instrucciones MIPS and u or.
+   * Restricciones: Los operandos deben ser booleanos.
+   */
+  private void generarOperacionLogica(
+      String destino,
+      String operando1,
+      String operador,
+      String operando2
+  ) {
+    String registro1 = obtenerRegistroOperando(
+        operando1, "$t8", "$f20"
+    );
+
+    String registro2 = obtenerRegistroOperando(
+        operando2, "$t9", "$f22"
+    );
+
+    String registroDestino = asignarRegistroTemporal(destino);
+
+    if (registroDestino == null) {
+      throw new IllegalStateException(
+          "No hay registros disponibles para: " + destino
+      );
+    }
+
+    String operacion;
+
+    switch (operador) {
+      case "λ":
+        operacion = "and";
+        break;
+
+      case "θ":
+        operacion = "or";
+        break;
+
+      default:
+        throw new IllegalArgumentException(
+            "Operador logico no reconocido: " + operador
+        );
+    }
+
+    codigoMIPS.add("    " + operacion + " "
+        + registroDestino + ", "
+        + registro1 + ", " + registro2);
+  }
+
+  /**
+   * Nombre: generarNegacionLogica
+   * Descripcion: Invierte el valor de un booleano.
+   * Entradas: Temporal destino y operando.
+   * Salidas: Instruccion MIPS xori.
+   * Restricciones: El operando debe ser booleano.
+   */
+  private void generarNegacionLogica(
+      String destino,
+      String operando
+  ) {
+    String registro = obtenerRegistroOperando(
+        operando, "$t8", "$f20"
+    );
+
+    String registroDestino = asignarRegistroTemporal(destino);
+
+    if (registroDestino == null) {
+      throw new IllegalStateException(
+          "No hay registros disponibles para: " + destino
+      );
+    }
+
+    codigoMIPS.add("    xori " + registroDestino
+        + ", " + registro + ", 1");
   }
 
   /**
