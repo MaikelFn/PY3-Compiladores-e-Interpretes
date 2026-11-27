@@ -156,7 +156,11 @@ public class GeneradorMIPS {
 
         } else if (nombresTemporales.contains(destino)
             && (origen.contains(" + ")
-                || origen.contains(" - "))) {
+                || origen.contains(" - ")
+                || origen.contains(" * ")
+                || origen.contains(" / ")
+                || origen.contains(" // ")
+                || origen.contains(" mod "))) {
 
           String[] operandos = origen.split("\\s+", 3);
 
@@ -718,6 +722,29 @@ public class GeneradorMIPS {
   }
 
   /**
+   * Nombre: convertirEnteroAFloat
+   * Descripcion: Convierte un valor entero almacenado
+   * en un registro a un valor de punto flotante.
+   * Salidas: Instrucciones de conversion MIPS.
+   *
+   * @param registroEntero Registro que contiene el entero.
+   * @param registroFloat Registro destino de la conversion.
+   * @return Registro flotante que contiene el resultado.
+   */
+  private String convertirEnteroAFloat(
+      String registroEntero,
+      String registroFloat
+  ) {
+    codigoMIPS.add("    mtc1 " + registroEntero
+        + ", " + registroFloat);
+
+    codigoMIPS.add("    cvt.s.w " + registroFloat
+        + ", " + registroFloat);
+
+    return registroFloat;
+  }
+
+  /**
    * Nombre: generarOperacionAritmetica
    * Descripcion: Traduce una operacion aritmetica
    * del codigo intermedio a instrucciones MIPS.
@@ -748,6 +775,16 @@ public class GeneradorMIPS {
 
     String tipo = obtenerTipoOperando(destino);
 
+    if (tipo.equals("float")) {
+      if (obtenerTipoOperando(operando1).equals("int")) {
+        registro1 = convertirEnteroAFloat(registro1, "$f20");
+      }
+
+      if (obtenerTipoOperando(operando2).equals("int")) {
+        registro2 = convertirEnteroAFloat(registro2, "$f22");
+      }
+    }
+
     String operacion;
 
     switch (operador) {
@@ -758,6 +795,25 @@ public class GeneradorMIPS {
       case "-":
         operacion = tipo.equals("float") ? "sub.s" : "subu";
         break;
+
+      case "*":
+        operacion = tipo.equals("float") ? "mul.s" : "mul";
+        break;
+
+      case "/":
+        operacion = "div.s";
+        break;
+
+      case "//":
+      case "mod":
+        codigoMIPS.add("    div " + registro1
+            + ", " + registro2);
+
+        operacion = operador.equals("//") ? "mflo" : "mfhi";
+
+        codigoMIPS.add("    " + operacion + " " + registroDestino);
+
+        return;
 
       default:
         throw new IllegalArgumentException(

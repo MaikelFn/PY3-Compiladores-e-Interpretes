@@ -193,7 +193,7 @@ public class GeneradorCodigoIntermedio {
     }
     List<String> lugaresArgumentos = new ArrayList<>();
     for (ResultadoExpresion argumento : argumentos) {
-      String lugar = obtenerLugarOperando(argumento.getLugar());
+      String lugar = obtenerTemporalOperando(argumento);
 
       lugaresArgumentos.add(lugar);
     }
@@ -317,6 +317,29 @@ public class GeneradorCodigoIntermedio {
     }
 
     return lugar;
+  }
+
+  /**
+   * Nombre: obtenerTemporalOperando
+   * Descripcion: Obtiene un temporal que contiene el valor
+   * de una expresion.
+   * Salidas: Genera una asignacion si el operando
+   * no es un temporal.
+   *
+   * @param expresion Expresion que se almacenara.
+   * @return Nombre del temporal.
+   */
+  private String obtenerTemporalOperando(ResultadoExpresion expresion) {
+    String lugar = expresion.getLugar();
+
+    if (lugar.matches("t[0-9]+")) {
+      return lugar;
+    }
+
+    String temporal = nuevoTemporal(expresion.getTipo());
+    generarAsignacion(temporal, lugar);
+
+    return temporal;
   }
 
   /**
@@ -753,13 +776,19 @@ public class GeneradorCodigoIntermedio {
 
   /**
    * Nombre: generarRead
-   * Descripcion: Genera una instruccion de lectura.
-   * Salidas: Agrega una instruccion read al codigo intermedio.
+   * Descripcion: Genera una instruccion de lectura
+   * mediante un temporal.
+   * Salidas: Instruccion de lectura y asignacion.
    *
    * @param identificador Identificador que recibira la entrada.
+   * @param tipo Tipo de dato del identificador.
    */
-  public void generarRead(String identificador) {
-    emitir("read " + identificador);
+  public void generarRead(String identificador, String tipo) {
+    String temporal = nuevoTemporal(tipo);
+
+    emitir("read " + temporal);
+
+    generarAsignacion(identificador, temporal);
   }
 
   /**
@@ -773,7 +802,7 @@ public class GeneradorCodigoIntermedio {
     if (expresion == null || expresion.getLugar() == null) {
       return;
     }
-    String lugar = obtenerLugarOperando(expresion.getLugar());
+    String lugar = obtenerTemporalOperando(expresion);
 
     emitir("write " + lugar);
   }

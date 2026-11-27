@@ -100,14 +100,15 @@ parser code {:
      *
      * @param nombre Nombre del identificador.
      * @param linea Linea donde se utiliza.
+     * @return Tipo del identificador o null si no es valido.
      */
-    public void validarRead(String nombre, int linea) {
+    public String validarRead(String nombre, int linea) {
         TablaSimbolos.Simbolo simbolo =
             tablaSimbolos.buscarSimbolo(nombre);
 
         if (simbolo == null) {
             validarIdentificador(nombre, linea);
-            return;
+            return null;
         }
 
         if (!"variable".equals(simbolo.getCategoria())
@@ -117,7 +118,7 @@ parser code {:
                 + ": read requiere una variable, pero '"
                 + nombre + "' no es una variable."
             );
-            return;
+            return null;
         }
 
         String tipo = simbolo.getTipo();
@@ -130,7 +131,10 @@ parser code {:
                 + ": read solo admite variables int, float o char; '"
                 + nombre + "' es de tipo '" + tipo + "'."
             );
+            return null;
         }
+
+        return tipo;
     }
 
     /**
@@ -542,7 +546,10 @@ parser code {:
             case "-":
             case "*":
             case "/":
-                tiposSonValidos = izquierdoEsNumerico && derechoEsNumerico;
+                tiposSonValidos =
+                    izquierdoEsNumerico
+                    && derechoEsNumerico
+                    && tipoOperandoIzquierdo.equals(tipoOperandoDerecho);
                 break;
 
             default:
@@ -573,11 +580,7 @@ parser code {:
             case "+":
             case "-":
             case "*":
-                if (tipoOperandoIzquierdo.equals("float")
-                    || tipoOperandoDerecho.equals("float")) {
-                    return "float";
-                }
-                return "int";
+                return tipoOperandoIzquierdo;
 
             default:
                 return null;
@@ -618,17 +621,19 @@ parser code {:
             case "<=":
             case ">":
             case ">=":
-                tiposSonValidos = izquierdoEsNumerico && derechoEsNumerico;
+                tiposSonValidos =
+                    izquierdoEsNumerico
+                    && derechoEsNumerico
+                    && tipoOperandoIzquierdo.equals(tipoOperandoDerecho);
                 break;
 
             case "==":
             case "!=":
                 tiposSonValidos =
-                    (izquierdoEsNumerico && derechoEsNumerico)
-                    || (tipoOperandoIzquierdo.equals("bool")
-                        && tipoOperandoDerecho.equals("bool"))
-                    || (tipoOperandoIzquierdo.equals("char")
-                        && tipoOperandoDerecho.equals("char"));
+                    tipoOperandoIzquierdo.equals(tipoOperandoDerecho)
+                    && (izquierdoEsNumerico
+                        || tipoOperandoIzquierdo.equals("bool")
+                        || tipoOperandoIzquierdo.equals("char"));
                 break;
 
             default:
@@ -2316,8 +2321,11 @@ ASIGNACION_ARREGLO ::=
 SENTENCIA_READ ::=
       READ PAR_INI ID:id PAR_FIN FIN_EXPR
       {:
-          validarRead((String) id, idleft);
-          generador.generarRead((String) id);
+          String tipo = validarRead((String) id, idleft);
+
+          if (tipo != null) {
+              generador.generarRead((String) id, tipo);
+          }
       :}
     ;
 
