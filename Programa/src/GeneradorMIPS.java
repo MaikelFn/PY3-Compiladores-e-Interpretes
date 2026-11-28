@@ -17,6 +17,8 @@ public class GeneradorMIPS {
   private final List<String> cadenas = new ArrayList<>();
   private String funcionActual = null;
   private int espacioPila = 0;
+  private static final boolean SALTO_LINEA_EN_WRITE = true;
+  private int contadorWrite = 0;
   private boolean utilizaPotencia = false;
   private boolean utilizaComparacionFloat = false;
   private final List<String> nombresLocales = new ArrayList<>();
@@ -75,6 +77,7 @@ public class GeneradorMIPS {
 
     utilizaPotencia = false;
     utilizaComparacionFloat = false;
+    contadorWrite = 0;
 
     generarSeccionData();
     generarSeccionText();
@@ -110,6 +113,9 @@ public class GeneradorMIPS {
     }
 
     generarLiteralesCadena();
+
+    codigoMIPS.add("    __bool_true: .asciiz \"true\"");
+    codigoMIPS.add("    __bool_false: .asciiz \"false\"");
   }
 
   /**
@@ -149,6 +155,16 @@ public class GeneradorMIPS {
           && instruccion.startsWith("if ")) {
 
         generarSaltoCondicional(instruccion);
+
+      } else if (funcionActual != null
+          && instruccion.startsWith("write ")) {
+
+        generarWrite(instruccion);
+
+      } else if (funcionActual != null
+          && instruccion.startsWith("read ")) {
+
+        generarRead(instruccion);
 
       } else if (funcionActual != null
           && instruccion.contains(" = ")) {
@@ -240,6 +256,121 @@ public class GeneradorMIPS {
       }
 
       liberarTemporalesSinUso(i);
+    }
+  }
+
+  /**
+   * Nombre: generarWrite
+   * Descripcion: Traduce una instruccion write usando los syscalls
+   * de QtSpim segun el tipo del temporal.
+   * Entradas: Instruccion con formato "write temporal".
+   * Salidas: Syscall de impresion (int=1, float=2, string=4, char=11).
+   * Restricciones: El operando debe ser un temporal con registro.
+   *
+   * @param instruccion Instruccion write del codigo intermedio.
+   */
+  private void generarWrite(String instruccion) {
+    String operando = instruccion.substring(6).trim();
+    String tipo = obtenerTipoOperando(operando);
+    String registro = obtenerRegistroOperando(operando, "$t8", "$f20");
+
+    switch (tipo) {
+      case "int":
+        codigoMIPS.add("    li $v0, 1");
+        codigoMIPS.add("    move $a0, " + registro);
+        break;
+
+      case "float":
+        codigoMIPS.add("    li $v0, 2");
+        codigoMIPS.add("    mov.s $f12, " + registro);
+        break;
+
+      case "string":
+        codigoMIPS.add("    li $v0, 4");
+        codigoMIPS.add("    move $a0, " + registro);
+        break;
+
+      case "char":
+        codigoMIPS.add("    li $v0, 11");
+        codigoMIPS.add("    move $a0, " + registro);
+        break;
+
+      case "bool":
+        int id = contadorWrite++;
+
+        codigoMIPS.add("    beq " + registro
+            + ", $zero, __write_falso_" + id);
+        codigoMIPS.add("    nop");
+        codigoMIPS.add("    la $a0, __bool_true");
+        codigoMIPS.add("    j __write_fin_" + id);
+        codigoMIPS.add("    nop");
+        codigoMIPS.add("__write_falso_" + id + ":");
+        codigoMIPS.add("    la $a0, __bool_false");
+        codigoMIPS.add("__write_fin_" + id + ":");
+        codigoMIPS.add("    li $v0, 4");
+        break;
+
+      default:
+        throw new IllegalArgumentException(
+            "Tipo no soportado en write: " + tipo
+        );
+    }
+
+    codigoMIPS.add("    syscall");
+
+    if (SALTO_LINEA_EN_WRITE) {
+      codigoMIPS.add("    li $v0, 11");
+      codigoMIPS.add("    li $a0, 10");
+      codigoMIPS.add("    syscall");
+    }
+  }
+
+  /**
+   * Nombre: generarRead
+   * Descripcion: Traduce una instruccion read usando los syscalls
+   * de QtSpim segun el tipo del temporal.
+   * Entradas: Instruccion con formato "read temporal".
+   * Salidas: Syscall de lectura (int=5, float=6, char=12)
+   * y valor leido en el registro del temporal.
+   * Restricciones: La lectura de string no esta soportada aun.
+   *
+   * @param instruccion Instruccion read del codigo intermedio.
+   */
+  private void generarRead(String instruccion) {
+    String temporal = instruccion.substring(5).trim();
+    String tipo = obtenerTipoOperando(temporal);
+    String registro = asignarRegistroTemporal(temporal);
+
+    if (registro == null) {
+      throw new IllegalStateException(
+          "No hay registros disponibles para: " + temporal
+      );
+    }
+
+    switch (tipo) {
+      case "int":
+      case "bool":
+        codigoMIPS.add("    li $v0, 5");
+        codigoMIPS.add("    syscall");
+        codigoMIPS.add("    move " + registro + ", $v0");
+        break;
+
+      case "float":
+        codigoMIPS.add("    li $v0, 6");
+        codigoMIPS.add("    syscall");
+        codigoMIPS.add("    mov.s " + registro + ", $f0");
+        break;
+
+      case "char":
+        codigoMIPS.add("    li $v0, 12");
+        codigoMIPS.add("    syscall");
+        codigoMIPS.add("    move " + registro + ", $v0");
+        break;
+
+      default:
+        throw new IllegalArgumentException(
+            "Tipo no soportado en read: " + tipo
+        );
     }
   }
 
