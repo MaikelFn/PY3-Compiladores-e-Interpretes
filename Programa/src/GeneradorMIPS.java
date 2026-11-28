@@ -136,6 +136,21 @@ public class GeneradorMIPS {
         registrarTemporal(instruccion);
 
       } else if (funcionActual != null
+          && instruccion.endsWith(":")) {
+
+        generarEtiqueta(instruccion);
+
+      } else if (funcionActual != null
+          && instruccion.startsWith("goto ")) {
+
+        generarSalto(instruccion);
+
+      } else if (funcionActual != null
+          && instruccion.startsWith("if ")) {
+
+        generarSaltoCondicional(instruccion);
+
+      } else if (funcionActual != null
           && instruccion.contains(" = ")) {
 
         String[] partes = instruccion.split(" = ", 2);
@@ -226,6 +241,59 @@ public class GeneradorMIPS {
 
       liberarTemporalesSinUso(i);
     }
+  }
+
+  /**
+   * Nombre: generarEtiqueta
+   * Descripcion: Traduce una etiqueta del codigo intermedio.
+   * Entradas: Instruccion con formato "etiqueta:".
+   * Salidas: Etiqueta en codigo MIPS.
+   *
+   * @param instruccion Etiqueta del codigo intermedio.
+   */
+  private void generarEtiqueta(String instruccion) {
+    codigoMIPS.add(instruccion);
+  }
+
+  /**
+   * Nombre: generarSalto
+   * Descripcion: Traduce un salto incondicional.
+   * Entradas: Instruccion con formato "goto etiqueta".
+   * Salidas: Instruccion j seguida de nop.
+   *
+   * @param instruccion Salto del codigo intermedio.
+   */
+  private void generarSalto(String instruccion) {
+    String etiqueta = instruccion.substring(5).trim();
+
+    codigoMIPS.add("    j " + etiqueta);
+    codigoMIPS.add("    nop");
+  }
+
+  /**
+   * Nombre: generarSaltoCondicional
+   * Descripcion: Traduce un salto condicional.
+   * Entradas: Instruccion con formato "if cond goto etiqueta".
+   * Salidas: Instruccion bne contra $zero seguida de nop.
+   * Restricciones: La condicion debe ser booleana (0 o 1).
+   *
+   * @param instruccion Salto condicional del codigo intermedio.
+   */
+  private void generarSaltoCondicional(String instruccion) {
+    String[] partes = instruccion.split("\\s+");
+
+    if (partes.length != 4 || !partes[2].equals("goto")) {
+      throw new IllegalArgumentException(
+          "Salto condicional invalido: " + instruccion
+      );
+    }
+
+    String registro = obtenerRegistroOperando(
+        partes[1], "$t8", "$f20"
+    );
+
+    codigoMIPS.add("    bne " + registro + ", $zero, " + partes[3]);
+    codigoMIPS.add("    nop");
   }
 
   /**
